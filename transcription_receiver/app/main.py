@@ -28,7 +28,7 @@ async def receive_transcriptions(request: Request):
         data = await request.json()
         timestamp = data.get("timestamp")
         duration = data.get("duration")
-        combined_text = data.get("text", "")
+        combined_text = data.get("words_spoken", "")
         words = data.get("words", [])
         segment_count = data.get("segment_count", 0)
         

@@ -66,7 +66,7 @@ async def send_transcriptions():
             payload = {
                 "timestamp": current_time.isoformat(),
                 "duration": (current_time - last_send_time).total_seconds(),
-                "text": combined_text,
+                "words_spoken": combined_text,
                 "words": all_words,
                 "segment_count": len(transcription_buffer)
             }
