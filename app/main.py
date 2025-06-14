@@ -57,28 +57,27 @@ async def websocket_endpoint(websocket: WebSocket):
     logger.info("WebSocket connection established.")
     
     raw_buffer = bytearray()
-    is_first_chunk = True  # Track if this is the first chunk
+    MIN_BUFFER_SIZE = 50000  # Minimum size for a complete WebM frame
+    MAX_BUFFER_SIZE = 100000  # Maximum size to prevent memory issues
 
     try:
         while True:
             data = await websocket.receive_bytes()
             raw_buffer.extend(data)
 
-            if len(raw_buffer) >= BUFFER_SIZE_BYTES:
+            # Only process when we have enough data for a complete frame
+            if len(raw_buffer) >= MIN_BUFFER_SIZE:
                 logger.info(f"Buffer full ({len(raw_buffer)} bytes), transcribing...")
                 
-                current_chunk = bytes(raw_buffer)  # Convert to bytes
-                raw_buffer = bytearray()  # Reset buffer
+                # Take up to MAX_BUFFER_SIZE bytes
+                current_chunk = bytes(raw_buffer[:MAX_BUFFER_SIZE])
+                # Keep the remainder in the buffer
+                raw_buffer = raw_buffer[MAX_BUFFER_SIZE:]
                 
                 try:
                     # Create a new buffer for each chunk
                     audio_buffer = io.BytesIO(current_chunk)
-                    # Only set the name for the first chunk, which should be a complete WebM file
-                    if is_first_chunk:
-                        audio_buffer.name = "audio.webm"
-                        is_first_chunk = False
-                    else:
-                        audio_buffer.name = "audio.raw"  # For subsequent chunks, treat as raw audio
+                    audio_buffer.name = "audio.webm"  # Always treat as WebM
 
                     # Using advanced features of Distil-Whisper
                     segments, info = await asyncio.to_thread(
