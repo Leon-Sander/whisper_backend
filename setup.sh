@@ -12,7 +12,6 @@ pip install --upgrade pip
 pip install fastapi==0.104.1
 pip install uvicorn==0.24.0
 pip install faster-whisper @ git+https://github.com/SYSTRAN/faster-whisper
-pip install datasets[audio]
 pip install python-multipart==0.0.6
 pip install websockets==12.0
 
