@@ -77,7 +77,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 try:
                     # Create a new buffer for each chunk
                     audio_buffer = io.BytesIO(current_chunk)
-                    audio_buffer.name = "audio.webm"  # Always treat as WebM
+                    audio_buffer.name = "audio.ogg"  # Set to OGG format
 
                     # Using advanced features of Distil-Whisper
                     segments, info = await asyncio.to_thread(
