@@ -49,10 +49,14 @@ async def websocket_endpoint(websocket: WebSocket):
                 audio_buffer = bytearray()
 
                 try:
+                    # Create a buffer with proper format for Whisper
+                    audio_buffer = io.BytesIO(chunk_to_process)
+                    audio_buffer.name = "audio.ogg"  # Set format for Whisper
+
                     # Transcribe the accumulated audio chunk
                     segments, info = await asyncio.to_thread(
                         model.transcribe,
-                        io.BytesIO(chunk_to_process),
+                        audio_buffer,
                         beam_size=5,
                         language="en",
                         vad_filter=True, # VAD is useful here on the larger chunk
