@@ -27,19 +27,19 @@ pip install -r requirements.txt
 
 Create a `.env` file with the following variables:
 ```env
-PORT=8001  # The port to run the server on
+PORT=8002  # The port to run the server on
 ```
 
 ## Usage
 
 1. Start the server:
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8001
+uvicorn app.main:app --host 0.0.0.0 --port 8002
 ```
 
 2. View the transcriptions:
 ```
-http://localhost:8001
+http://localhost:8002
 ```
 
 ## API Endpoints
