@@ -103,154 +103,148 @@
         <div id="debug"></div>
     </div>
 
+    <!-- ======================= START OF MODIFIED SCRIPT ======================= -->
     <script>
         const button = document.getElementById('button');
         const transcriptDiv = document.getElementById('transcript');
         const statusDiv = document.getElementById('status');
         const connectionStatus = document.getElementById('connection-status');
         const debugDiv = document.getElementById('debug');
-
+    
         function log(message) {
             const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
             debugDiv.textContent += `[${timestamp}] ${message}\n`;
+            debugDiv.scrollTop = debugDiv.scrollHeight;
             console.log(message);
         }
-
-        const WEBSOCKET_URL = 'ws://213.173.108.100:30976/listen';
-
+    
+        const WEBSOCKET_URL = 'ws://213.173.110.22:30197/listen';
+    
         let socket;
-        let mediaRecorder;
         let isRecording = false;
-
+        let recordingInterval;
+        let userAudioStream; // This will hold the single audio stream for the session
+        const CHUNK_DURATION = 3000; // 3 seconds
+    
         button.addEventListener('click', () => {
-            log('Button clicked');
             if (isRecording) {
-                log('Stopping recording...');
-                stopRecording();
+                stopOverallRecording();
             } else {
-                log('Starting recording...');
-                startRecording();
+                startOverallRecording();
             }
         });
-
-        function startRecording() {
+    
+        function startOverallRecording() {
             isRecording = true;
             button.textContent = 'Stop Recording';
             button.classList.add('recording');
+            transcriptDiv.innerHTML = '';
             statusDiv.textContent = 'Connecting...';
             log('Attempting to connect to WebSocket...');
-
-            try {
-                socket = new WebSocket(WEBSOCKET_URL);
-                log('WebSocket instance created');
-
-                socket.onopen = () => {
-                    log('WebSocket connection opened');
-                    connectionStatus.textContent = 'Connected';
-                    connectionStatus.className = 'connected';
-                    statusDiv.textContent = 'Connected. Start speaking!';
-
-                    navigator.mediaDevices.getUserMedia({ audio: true })
-                        .then(stream => {
-                            log('Microphone access granted');
-                            mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-                            log('MediaRecorder created');
-
-                            mediaRecorder.addEventListener('dataavailable', event => {
-                                if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
-                                    log(`Sending audio chunk: ${event.data.size} bytes`);
-                                    socket.send(event.data);
-                                }
+    
+            socket = new WebSocket(WEBSOCKET_URL);
+    
+            socket.onopen = () => {
+                log('WebSocket connection opened.');
+                connectionStatus.textContent = 'Connected';
+                connectionStatus.className = 'connected';
+                statusDiv.textContent = 'Requesting microphone access...';
+    
+                // STEP 1: Get the microphone stream ONCE at the beginning.
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then(stream => {
+                        log('Microphone access granted.');
+                        statusDiv.textContent = 'Connected. Start speaking!';
+                        userAudioStream = stream; // Store the stream globally for the session
+    
+                        // STEP 2: Now that we have the stream, start the recording loop.
+                        recordAndSendChunk(); // Record the first chunk immediately
+                        recordingInterval = setInterval(recordAndSendChunk, CHUNK_DURATION);
+                    })
+                    .catch(err => {
+                        log(`FATAL: Microphone error: ${err.message}`);
+                        stopOverallRecording();
+                    });
+            };
+    
+            socket.onmessage = (event) => {
+                log('Received message from server');
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'transcription' && data.segments) {
+                        data.segments.forEach(segment => {
+                            const segmentDiv = document.createElement('div');
+                            segmentDiv.className = 'segment';
+                            segment.words.forEach(word => {
+                                const wordSpan = document.createElement('span');
+                                wordSpan.className = 'word';
+                                wordSpan.textContent = word.word + ' ';
+                                wordSpan.title = `${word.start.toFixed(2)}s - ${word.end.toFixed(2)}s`;
+                                segmentDiv.appendChild(wordSpan);
                             });
-                            
-                            mediaRecorder.start(250);
-                            log('MediaRecorder started');
-                        })
-                        .catch(err => {
-                            log(`Error accessing microphone: ${err.message}`);
-                            console.error("Error accessing microphone:", err);
-                            statusDiv.textContent = 'Could not access microphone.';
-                            stopRecording();
+                            transcriptDiv.appendChild(segmentDiv);
+                            transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
                         });
-                };
-
-                socket.onmessage = (event) => {
-                    log('Received message from server');
-                    try {
-                        const data = JSON.parse(event.data);
-                        log(`Message type: ${data.type}`);
-                        
-                        if (data.type === 'transcription') {
-                            data.segments.forEach(segment => {
-                                const segmentDiv = document.createElement('div');
-                                segmentDiv.className = 'segment';
-                                
-                                segment.words.forEach(word => {
-                                    const wordSpan = document.createElement('span');
-                                    wordSpan.className = 'word';
-                                    wordSpan.textContent = word.word;
-                                    wordSpan.title = `${word.start.toFixed(2)}s - ${word.end.toFixed(2)}s`;
-                                    
-                                    wordSpan.addEventListener('click', () => {
-                                        document.querySelectorAll('.word.active').forEach(w => w.classList.remove('active'));
-                                        wordSpan.classList.add('active');
-                                    });
-                                    
-                                    segmentDiv.appendChild(wordSpan);
-                                });
-                                
-                                transcriptDiv.appendChild(segmentDiv);
-                            });
-                        } else if (data.type === 'error') {
-                            log(`Server error: ${data.error}`);
-                            console.error("Server error:", data.error);
-                            statusDiv.textContent = 'An error occurred during transcription.';
-                        }
-                    } catch (err) {
-                        log(`Error parsing message: ${err.message}`);
                     }
-                };
-
-                socket.onclose = (event) => {
-                    log(`WebSocket closed. Code: ${event.code}, Reason: ${event.reason}`);
-                    connectionStatus.textContent = 'Disconnected';
-                    connectionStatus.className = 'disconnected';
-                    if(isRecording) {
-                        stopRecording();
-                    }
-                };
-
-                socket.onerror = (error) => {
-                    log('WebSocket error occurred');
-                    log(`Error details: ${error.message || 'No error message available'}`);
-                    connectionStatus.textContent = 'Connection Error';
-                    connectionStatus.className = 'disconnected';
-                    console.error('WebSocket error:', error);
-                    statusDiv.textContent = 'An error occurred. Please check if the server is running.';
-                };
-            } catch (err) {
-                log(`Error creating WebSocket: ${err.message}`);
-                stopRecording();
-            }
+                } catch (err) { log(`Error parsing server message: ${err.message}`); }
+            };
+    
+            socket.onclose = (event) => { log(`WebSocket closed. Code: ${event.code}`); stopOverallRecording(); };
+            socket.onerror = (error) => { log('WebSocket error occurred.'); stopOverallRecording(); };
         }
-
-        function stopRecording() {
-            log('Stopping recording...');
+    
+        function recordAndSendChunk() {
+            if (!isRecording || !userAudioStream) return;
+            log('Starting new recording chunk from existing stream...');
+            
+            // STEP 3: Create a NEW recorder instance from the EXISTING stream.
+            const recorder = new MediaRecorder(userAudioStream, { mimeType: 'audio/webm' });
+            const audioChunks = [];
+    
+            recorder.ondataavailable = event => {
+                audioChunks.push(event.data);
+            };
+    
+            recorder.onstop = () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                if (audioBlob.size > 0 && socket && socket.readyState === WebSocket.OPEN) {
+                    log(`Sending complete audio file (${audioBlob.size} bytes)...`);
+                    socket.send(audioBlob);
+                }
+            };
+    
+            recorder.start();
+            setTimeout(() => {
+                if (recorder.state === 'recording') {
+                    recorder.stop();
+                }
+            }, CHUNK_DURATION);
+        }
+    
+        function stopOverallRecording() {
+            if (!isRecording) return;
+            log('Stopping overall recording session.');
             isRecording = false;
+    
+            clearInterval(recordingInterval); // Stop the loop
+    
+            // STEP 4: Stop the master audio stream to release the microphone.
+            if (userAudioStream) {
+                userAudioStream.getTracks().forEach(track => track.stop());
+                userAudioStream = null;
+            }
+            
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.close();
+            }
+            
             button.textContent = 'Start Recording';
             button.classList.remove('recording');
             statusDiv.textContent = 'Click to start recording.';
-
-            if (mediaRecorder && mediaRecorder.state === 'recording') {
-                log('Stopping MediaRecorder');
-                mediaRecorder.stop();
-                mediaRecorder.stream.getTracks().forEach(track => track.stop());
-            }
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                log('Closing WebSocket connection');
-                socket.close();
-            }
+            connectionStatus.textContent = 'Disconnected';
+            connectionStatus.className = 'disconnected';
         }
     </script>
+    <!-- ======================= END OF MODIFIED SCRIPT ======================= -->
 </body>
-</html> 
+</html>
