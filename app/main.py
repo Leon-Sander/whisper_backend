@@ -9,6 +9,9 @@ from typing import List, Dict
 import os
 import json
 import torch
+import io
+import wave
+import numpy as np
 
 # --- Basic Configuration ---
 logging.basicConfig(level=logging.INFO)
@@ -34,6 +37,17 @@ logger.info("Distil-Whisper model loaded successfully.")
 # --- WebSocket Endpoint for Live Transcription ---
 BUFFER_SIZE_BYTES = 50000  # ~3 seconds of audio at 16kHz
 
+def prepare_audio_buffer(audio_data):
+    """Prepare audio buffer for Whisper with proper format detection."""
+    try:
+        # Create a buffer and set its name to help with format detection
+        buffer = io.BytesIO(audio_data)
+        buffer.name = "audio.webm"  # This helps Whisper identify the format
+        return buffer
+    except Exception as e:
+        logger.error(f"Error preparing audio buffer: {e}")
+        return None
+
 @app.websocket("/listen")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -53,10 +67,15 @@ async def websocket_endpoint(websocket: WebSocket):
                 audio_buffer = bytearray()
                 
                 try:
+                    # Prepare the audio buffer with proper format detection
+                    audio_buffer = prepare_audio_buffer(current_chunk)
+                    if audio_buffer is None:
+                        raise Exception("Failed to prepare audio buffer")
+
                     # Using advanced features of Distil-Whisper
                     segments, info = await asyncio.to_thread(
                         model.transcribe,
-                        current_chunk,
+                        audio_buffer,
                         beam_size=5,
                         language="en",
                         condition_on_previous_text=False,
