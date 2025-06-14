@@ -56,18 +56,18 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     logger.info("WebSocket connection established.")
     
-    audio_buffer = bytearray()
+    raw_buffer = bytearray()
 
     try:
         while True:
             data = await websocket.receive_bytes()
-            audio_buffer.extend(data)
+            raw_buffer.extend(data)
 
-            if len(audio_buffer) >= BUFFER_SIZE_BYTES:
-                logger.info(f"Buffer full ({len(audio_buffer)} bytes), transcribing...")
+            if len(raw_buffer) >= BUFFER_SIZE_BYTES:
+                logger.info(f"Buffer full ({len(raw_buffer)} bytes), transcribing...")
                 
-                current_chunk = bytes(audio_buffer)  # Convert to bytes
-                audio_buffer = bytearray()  # Reset buffer
+                current_chunk = bytes(raw_buffer)  # Convert to bytes
+                raw_buffer = bytearray()  # Reset buffer
                 
                 try:
                     # Create a new buffer for each chunk
