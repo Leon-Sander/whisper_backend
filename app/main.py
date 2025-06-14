@@ -10,6 +10,10 @@ import logging
 import torch
 import io
 import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(name)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -18,7 +22,7 @@ app = FastAPI()
 
 # --- Your Model Loading Logic ---
 MODEL_NAME = "distil-whisper/distil-large-v3.5-ct2"
-DEVICE = "cuda"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 COMPUTE_TYPE = "float16"
 MODEL_PATH = os.getenv("WHISPER_MODEL_PATH", "./whisper_models")
 logger.info(f"Loading model '{MODEL_NAME}'...")
@@ -78,9 +82,18 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # Serve the HTML interface
 @app.get("/", response_class=HTMLResponse)
-async def get():
-    with open("app/static/index.html") as f:
-        return f.read()
+async def get_index():
+    with open("app/static/index.html", "r") as f:
+        html_content = f.read()
+    
+    # Replace the hardcoded WebSocket URL with the one from environment variables
+    websocket_url = os.getenv("WEBSOCKET_URL", "ws://localhost:8000/listen")
+    html_content = html_content.replace(
+        'const WEBSOCKET_URL = \'ws://localhost:8000/listen\';',
+        f'const WEBSOCKET_URL = \'{websocket_url}\';'
+    )
+    
+    return html_content
 
 @app.get("/health")
 async def health_check():

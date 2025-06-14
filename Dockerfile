@@ -6,6 +6,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     build-essential \
     git \
+    libcudnn9-cuda-12 \
+    libcudnn9-dev-cuda-12 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first to leverage Docker cache
@@ -21,6 +23,8 @@ RUN mkdir -p whisper_models
 # Set environment variables
 ENV DEVICE=cuda
 ENV COMPUTE_TYPE=float16
+ENV WHISPER_MODEL_PATH=/app/whisper_models
+ENV WEBSOCKET_URL=ws://localhost:8000/listen
 
 # Expose ports
 EXPOSE 8000  # FastAPI

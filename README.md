@@ -1,50 +1,96 @@
 # Live Speech-to-Text API
 
-A real-time speech-to-text transcription service using FastAPI, WebSockets, and faster-whisper.
+A real-time speech-to-text transcription service using FastAPI, WebSocket, and Faster-Whisper. This service provides live transcription of audio streams with word-level timestamps.
 
-## Features
+You can deploy the whisper server on one server, and locally run test.html (add the correct werbsocket url) to communicate with it.
 
-- Real-time speech transcription using WebSocket connections
-- Powered by faster-whisper for efficient transcription
-- Low-latency audio processing
-- Simple web interface for testing
-- Docker support for easy deployment
+## Prerequisites
 
-## Setup
+- Python 3.11+
+- CUDA 12.x compatible GPU (for optimal performance)
+- Docker (optional, for containerized deployment)
 
-1. Install dependencies:
+## Installation
+
+### Local Installation
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd <repository-name>
+```
+
+2. Create and activate a virtual environment (recommended):
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Run the server:
+4. Create directory for Whisper models:
 ```bash
-uvicorn app.main:app --reload
+mkdir -p whisper_models
 ```
 
-3. Open `http://localhost:8000` in your browser to access the test interface.
+### Docker Installation
+
+1. Build the Docker image:
+```bash
+docker build -t speech-to-text-api .
+```
+
+2. Run the container:
+```bash
+docker run -p 8000:8000 --gpus all speech-to-text-api
+```
+
+## Configuration
+
+Create a `.env` file in the project root with the following variables:
+
+```env
+# Server Configuration
+WEBSOCKET_URL=ws://your_server_ip:8000/listen
+
+# Model Configuration
+WHISPER_MODEL_PATH=./whisper_models
+```
+
+## Usage
+
+1. Start the server:
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+2. Open the web interface:
+```
+http://localhost:8000
+```
+
+3. Click "Start Recording" to begin transcription.
 
 ## API Endpoints
 
 - `GET /`: Web interface for testing
-- `WS /listen`: WebSocket endpoint for real-time transcription
-- `POST /transcribe`: HTTP endpoint for file transcription
+- `WebSocket /listen`: WebSocket endpoint for real-time audio streaming and transcription
+- `GET /health`: Health check endpoint
 
-## Docker Deployment
+## Development
 
-Build and run with Docker:
-
-```bash
-docker build -t speech-to-text-api .
-docker run -p 8000:8000 speech-to-text-api
+The project structure:
 ```
-
-## RunPod Deployment
-
-1. Build the Docker image
-2. Push to Docker Hub
-3. Deploy on RunPod using the provided template
-
-## License
-
-MIT 
+.
+├── app/
+│   ├── main.py           # FastAPI application
+│   └── static/
+│       └── index.html    # Web interface
+├── whisper_models/       # Directory for Whisper models
+├── requirements.txt      # Python dependencies
+├── Dockerfile           # Docker configuration
+└── .env                 # Environment variables
+```
