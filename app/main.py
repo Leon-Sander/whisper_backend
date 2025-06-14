@@ -45,7 +45,7 @@ async def send_transcriptions():
     
     while True:
         try:
-            await asyncio.sleep(60)  # Wait for 1 minute
+            await asyncio.sleep(10)
             
             current_time = datetime.now()
             if not transcription_buffer:
