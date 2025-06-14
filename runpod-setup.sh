@@ -1,16 +1,7 @@
 #!/bin/bash
 
-# Create virtual environment in the current directory
-python -m venv venv
-source venv/bin/activate
-
-# Install requirements
-pip install --upgrade pip
-pip install fastapi==0.104.1
-pip install uvicorn==0.24.0
-pip install git+https://github.com/SYSTRAN/faster-whisper
-pip install python-multipart==0.0.6
-pip install websockets==12.0
+# Install our specific requirements
+pip install -r requirements.txt
 
 # Create directory for Whisper models
 mkdir -p whisper_models
@@ -18,7 +9,6 @@ mkdir -p whisper_models
 # Create start script
 cat > start-whisper.sh << 'EOL'
 #!/bin/bash
-source venv/bin/activate
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 EOL
 
