@@ -32,7 +32,6 @@ logger.info(f"Loading model '{MODEL_NAME}'...")
 model = WhisperModel(MODEL_NAME, device=DEVICE, compute_type=COMPUTE_TYPE, download_root=MODEL_PATH)
 logger.info("Model loaded successfully.")
 
-
 class StatefulDecoder:
     """Manages the decoding state for a single WebSocket audio stream."""
     def __init__(self):
@@ -45,14 +44,11 @@ class StatefulDecoder:
         try:
             with av.open(io.BytesIO(first_chunk)) as container:
                 stream = container.streams.audio[0]
-                
-                #_ NEW LOGGING: Print header/codec info
                 logger.info("---- Initializing Decoder from First Chunk ----")
                 logger.info(f"Codec: {stream.codec_context.codec.name}")
                 logger.info(f"Layout: {stream.codec_context.layout.name}")
                 logger.info(f"Sample Rate: {stream.codec_context.sample_rate}")
                 logger.info("-------------------------------------------------")
-
                 self.codec_context = stream.codec_context
                 self.resampler = av.AudioResampler(
                     format='s16', layout='mono', rate=16000
@@ -63,28 +59,39 @@ class StatefulDecoder:
             return False
 
     def decode_chunk(self, chunk: bytes) -> np.ndarray | None:
-        """Decodes a subsequent chunk of the stream."""
+        """Decodes a subsequent chunk of the stream by wrapping it in a Packet."""
         if not self.codec_context:
             return None
         
         try:
-            packets = self.codec_context.parse(chunk)
-            if not packets:
+            # THE FIX: Don't use parse(). Treat the entire chunk as a single packet.
+            packet = av.Packet(chunk)
+            
+            # Decode the single packet
+            decoded_frames = self.codec_context.decode(packet)
+
+            # If the decoder buffers frames, it might not return anything on the first pass
+            if not decoded_frames:
                 return None
                 
-            frames = []
-            for packet in packets:
-                decoded_frames = self.codec_context.decode(packet)
-                for frame in decoded_frames:
-                    resampled_frames = self.resampler.resample(frame)
-                    for resampled_frame in resampled_frames:
-                        frames.append(np.frombuffer(resampled_frame.planes[0], dtype=np.int16))
+            resampled_data = []
+            for frame in decoded_frames:
+                # Resample the frame to the format Whisper needs (16kHz mono s16)
+                resampled_frames = self.resampler.resample(frame)
+                for resampled_frame in resampled_frames:
+                    resampled_data.append(resampled_frame.to_ndarray(format='s16', layout='mono'))
             
-            if not frames:
+            if not resampled_data:
                 return None
-            return np.concatenate(frames)
+
+            # Concatenate all numpy arrays from the resampled frames
+            return np.concatenate(resampled_data)
+
         except Exception as e:
-            logger.error(f"Error decoding subsequent chunk: {e}")
+            # Errors like "Resource temporarily unavailable" can happen if a packet is needed
+            # to complete a frame. We can often safely ignore these.
+            if "Resource temporarily unavailable" not in str(e):
+                 logger.error(f"Error decoding subsequent chunk: {e}")
             return None
 
 
