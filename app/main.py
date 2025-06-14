@@ -57,6 +57,7 @@ async def websocket_endpoint(websocket: WebSocket):
     logger.info("WebSocket connection established.")
     
     raw_buffer = bytearray()
+    is_first_chunk = True  # Track if this is the first chunk
 
     try:
         while True:
@@ -72,7 +73,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 try:
                     # Create a new buffer for each chunk
                     audio_buffer = io.BytesIO(current_chunk)
-                    audio_buffer.name = "audio.webm"  # This helps Whisper identify the format
+                    # Only set the name for the first chunk, which should be a complete WebM file
+                    if is_first_chunk:
+                        audio_buffer.name = "audio.webm"
+                        is_first_chunk = False
+                    else:
+                        audio_buffer.name = "audio.raw"  # For subsequent chunks, treat as raw audio
 
                     # Using advanced features of Distil-Whisper
                     segments, info = await asyncio.to_thread(
