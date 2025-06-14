@@ -105,7 +105,7 @@ async def websocket_endpoint(websocket: WebSocket):
     decoder = StatefulDecoder()
     initialized = False
     
-    MIN_PCM_BUFFER_SIZE = 16000 * 2 * 3 # Buffer ~3 seconds of raw PCM audio
+    MIN_PCM_BUFFER_SIZE = 16 * 2 * 3 # Buffer ~3 seconds of raw PCM audio
 
     try:
         while True:
