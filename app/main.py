@@ -51,11 +51,24 @@ async def send_transcriptions():
             if not transcription_buffer:
                 continue
                 
+            # Combine all transcriptions into a single text
+            combined_text = " ".join(trans["text"] for trans in transcription_buffer)
+            
+            # Combine all words with their timestamps
+            all_words = []
+            for trans in transcription_buffer:
+                all_words.extend(trans["words"])
+            
+            # Sort words by their start time
+            all_words.sort(key=lambda x: x["start"])
+            
             # Prepare the payload
             payload = {
                 "timestamp": current_time.isoformat(),
                 "duration": (current_time - last_send_time).total_seconds(),
-                "transcriptions": transcription_buffer
+                "text": combined_text,
+                "words": all_words,
+                "segment_count": len(transcription_buffer)
             }
             
             # Send to endpoint
@@ -63,7 +76,7 @@ async def send_transcriptions():
                 try:
                     async with session.post(TRANSCRIPTION_ENDPOINT, json=payload) as response:
                         if response.status == 200:
-                            logger.info(f"Successfully sent {len(transcription_buffer)} transcriptions")
+                            logger.info(f"Successfully sent combined transcription of {len(combined_text)} characters")
                             transcription_buffer = []  # Clear buffer after successful send
                             last_send_time = current_time
                         else:

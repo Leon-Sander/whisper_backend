@@ -28,26 +28,31 @@ async def receive_transcriptions(request: Request):
         data = await request.json()
         timestamp = data.get("timestamp")
         duration = data.get("duration")
-        received_transcriptions = data.get("transcriptions", [])
+        combined_text = data.get("text", "")
+        words = data.get("words", [])
+        segment_count = data.get("segment_count", 0)
         
-        # Add metadata to each transcription
-        for trans in received_transcriptions:
-            trans["received_at"] = datetime.now().isoformat()
-            trans["batch_timestamp"] = timestamp
-            trans["batch_duration"] = duration
+        # Create a transcription entry
+        transcription = {
+            "received_at": datetime.now().isoformat(),
+            "batch_timestamp": timestamp,
+            "batch_duration": duration,
+            "text": combined_text,
+            "words": words,
+            "segment_count": segment_count
+        }
         
         # Add to our storage
-        transcriptions.extend(received_transcriptions)
+        transcriptions.append(transcription)
         
-        # Log the received transcriptions
-        logger.info(f"Received {len(received_transcriptions)} transcriptions")
-        for trans in received_transcriptions:
-            logger.info(f"Transcription: {trans['text']}")
+        # Log the received transcription
+        logger.info(f"Received transcription of {len(combined_text)} characters from {segment_count} segments")
+        logger.info(f"Text: {combined_text}")
         
-        return {"status": "success", "received": len(received_transcriptions)}
+        return {"status": "success", "received": True}
     
     except Exception as e:
-        logger.error(f"Error processing transcriptions: {str(e)}")
+        logger.error(f"Error processing transcription: {str(e)}")
         return {"status": "error", "message": str(e)}
 
 @app.get("/", response_class=HTMLResponse)
@@ -85,10 +90,13 @@ async def get_transcriptions():
             }
             .text {
                 margin: 5px 0;
+                font-size: 1.1em;
+                line-height: 1.4;
             }
             .words {
                 font-size: 0.9em;
                 color: #444;
+                margin-top: 10px;
             }
             .word {
                 display: inline-block;
@@ -96,6 +104,11 @@ async def get_transcriptions():
                 padding: 2px 4px;
                 border-radius: 3px;
                 background-color: #e3f2fd;
+            }
+            .metadata {
+                font-size: 0.8em;
+                color: #666;
+                margin-top: 5px;
             }
             h1 {
                 color: #333;
@@ -116,6 +129,10 @@ async def get_transcriptions():
             <div class="transcription">
                 <div class="timestamp">Received at: {trans.get('received_at', 'N/A')}</div>
                 <div class="text">{trans.get('text', '')}</div>
+                <div class="metadata">
+                    Duration: {trans.get('batch_duration', 0):.1f}s | 
+                    Segments: {trans.get('segment_count', 0)}
+                </div>
                 <div class="words">
         """
         
