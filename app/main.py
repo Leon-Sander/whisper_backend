@@ -108,7 +108,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     model.transcribe,
                     io.BytesIO(audio_file_chunk),
                     beam_size=5,
-                    language="en",
+                    language="de",
                     vad_filter=True,
                     word_timestamps=True
                 )
