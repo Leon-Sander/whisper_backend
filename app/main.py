@@ -32,6 +32,7 @@ logger.info(f"Loading model '{MODEL_NAME}'...")
 model = WhisperModel(MODEL_NAME, device=DEVICE, compute_type=COMPUTE_TYPE, download_root=MODEL_PATH)
 logger.info("Model loaded successfully.")
 
+
 class StatefulDecoder:
     """Manages the decoding state for a single WebSocket audio stream."""
     def __init__(self):
@@ -59,39 +60,40 @@ class StatefulDecoder:
             return False
 
     def decode_chunk(self, chunk: bytes) -> np.ndarray | None:
-        """Decodes a subsequent chunk of the stream by wrapping it in a Packet."""
+        """
+        Parses a raw bitstream chunk to find all packets, decodes them,
+        and returns the resampled PCM data.
+        """
         if not self.codec_context:
             return None
         
         try:
-            # THE FIX: Don't use parse(). Treat the entire chunk as a single packet.
-            packet = av.Packet(chunk)
+            # THE FIX: Use the parser to find all packets in the chunk.
+            packets = self.codec_context.parse(chunk)
             
-            # Decode the single packet
-            decoded_frames = self.codec_context.decode(packet)
+            # This list will hold all decoded and resampled audio data.
+            all_resampled_data = []
 
-            # If the decoder buffers frames, it might not return anything on the first pass
-            if not decoded_frames:
-                return None
+            # Loop through all the packets that the parser found.
+            for packet in packets:
+                # Decode each individual packet.
+                decoded_frames = self.codec_context.decode(packet)
                 
-            resampled_data = []
-            for frame in decoded_frames:
-                # Resample the frame to the format Whisper needs (16kHz mono s16)
-                resampled_frames = self.resampler.resample(frame)
-                for resampled_frame in resampled_frames:
-                    resampled_data.append(resampled_frame.to_ndarray())
-
-            if not resampled_data:
+                for frame in decoded_frames:
+                    # Resample each frame to what Whisper needs.
+                    resampled_frames = self.resampler.resample(frame)
+                    for resampled_frame in resampled_frames:
+                        # Append the resulting numpy array to our list.
+                        all_resampled_data.append(resampled_frame.to_ndarray())
+            
+            if not all_resampled_data:
                 return None
 
-            # Concatenate all numpy arrays from the resampled frames
-            return np.concatenate(resampled_data)
+            # Join all the numpy arrays from this chunk into one.
+            return np.concatenate(all_resampled_data)
 
         except Exception as e:
-            # Errors like "Resource temporarily unavailable" can happen if a packet is needed
-            # to complete a frame. We can often safely ignore these.
-            if "Resource temporarily unavailable" not in str(e):
-                 logger.error(f"Error decoding subsequent chunk: {e}")
+            logger.error(f"Error decoding subsequent chunk: {e}")
             return None
 
 
