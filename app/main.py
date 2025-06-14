@@ -79,8 +79,8 @@ class StatefulDecoder:
                 # Resample the frame to the format Whisper needs (16kHz mono s16)
                 resampled_frames = self.resampler.resample(frame)
                 for resampled_frame in resampled_frames:
-                    resampled_data.append(resampled_frame.to_ndarray(format='s16', layout='mono'))
-            
+                    resampled_data.append(resampled_frame.to_ndarray())
+
             if not resampled_data:
                 return None
 
