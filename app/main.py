@@ -64,11 +64,11 @@ async def send_transcriptions():
             
             # Prepare the payload
             payload = {
-                "timestamp": current_time.isoformat(),
-                "duration": (current_time - last_send_time).total_seconds(),
+                #"timestamp": current_time.isoformat(),
+                #"duration": (current_time - last_send_time).total_seconds(),
                 "words_spoken": combined_text,
-                "words": all_words,
-                "segment_count": len(transcription_buffer)
+                #"words": all_words,
+                #"segment_count": len(transcription_buffer)
             }
             
             # Send to endpoint
