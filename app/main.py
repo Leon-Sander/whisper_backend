@@ -21,8 +21,11 @@ app = FastAPI(title="Live Speech-to-Text API")
 
 # --- Model Loading ---
 MODEL_NAME = "distil-whisper/distil-large-v3.5-ct2"
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-COMPUTE_TYPE = "float16" if torch.cuda.is_available() else "float32"
+
+# Force CPU mode for now
+DEVICE = "cpu"
+COMPUTE_TYPE = "float32"
+
 MODEL_PATH = os.getenv("WHISPER_MODEL_PATH", "./whisper_models")
 
 logger.info(f"Loading Distil-Whisper model '{MODEL_NAME}' on {DEVICE}...")
@@ -63,14 +66,13 @@ async def websocket_endpoint(websocket: WebSocket):
             if len(audio_buffer) >= BUFFER_SIZE_BYTES:
                 logger.info(f"Buffer full ({len(audio_buffer)} bytes), transcribing...")
                 
-                current_chunk = audio_buffer
-                audio_buffer = bytearray()
+                current_chunk = bytes(audio_buffer)  # Convert to bytes
+                audio_buffer = bytearray()  # Reset buffer
                 
                 try:
-                    # Prepare the audio buffer with proper format detection
-                    audio_buffer = prepare_audio_buffer(current_chunk)
-                    if audio_buffer is None:
-                        raise Exception("Failed to prepare audio buffer")
+                    # Create a new buffer for each chunk
+                    audio_buffer = io.BytesIO(current_chunk)
+                    audio_buffer.name = "audio.webm"  # This helps Whisper identify the format
 
                     # Using advanced features of Distil-Whisper
                     segments, info = await asyncio.to_thread(
