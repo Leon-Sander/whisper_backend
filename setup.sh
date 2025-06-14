@@ -11,19 +11,21 @@ source venv/bin/activate
 pip install --upgrade pip
 pip install fastapi==0.104.1
 pip install uvicorn==0.24.0
-pip install faster-whisper @ git+https://github.com/SYSTRAN/faster-whisper
+pip install git+https://github.com/SYSTRAN/faster-whisper
 pip install python-multipart==0.0.6
 pip install websockets==12.0
 
 # Create directory for Whisper models if it doesn't exist
 mkdir -p whisper_models
 
-# Set up the application to run on startup
-echo '#!/bin/bash
+# Create start script in the current directory
+cat > start.sh << 'EOL'
+#!/bin/bash
 cd /workspace/whisper_backend
 source venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 8000' > /workspace/start.sh
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+EOL
 
-chmod +x /workspace/start.sh
+chmod +x start.sh
 
 echo "Setup complete! You can now start the application with: ./start.sh" 
