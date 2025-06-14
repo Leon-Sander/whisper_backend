@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Speech-to-Text</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        #button.recording {
+            background-color: #f44336;
+        }
+        #transcript {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            min-height: 100px;
+            background-color: #fafafa;
+            white-space: pre-wrap;
+        }
+        #status {
+            margin-top: 10px;
+            color: #666;
+        }
+        .word {
+            display: inline-block;
+            margin: 0 2px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            transition: background-color 0.2s;
+        }
+        .word:hover {
+            background-color: #e3f2fd;
+            cursor: pointer;
+        }
+        .word.active {
+            background-color: #bbdefb;
+        }
+        .timestamp {
+            font-size: 0.8em;
+            color: #666;
+            margin-left: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Live Speech-to-Text</h1>
+        <button id="button">Start Recording</button>
+        <div id="status">Click to start recording.</div>
+        <div id="transcript"></div>
+    </div>
+
+    <script>
+        const button = document.getElementById('button');
+        const transcriptDiv = document.getElementById('transcript');
+        const statusDiv = document.getElementById('status');
+
+        const WEBSOCKET_URL = `ws://${window.location.host}/listen`;
+
+        let socket;
+        let mediaRecorder;
+        let isRecording = false;
+        let currentAudioTime = 0;
+
+        button.addEventListener('click', () => {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        });
+
+        function startRecording() {
+            isRecording = true;
+            button.textContent = 'Stop Recording';
+            button.classList.add('recording');
+            statusDiv.textContent = 'Connecting...';
+            currentAudioTime = 0;
+
+            socket = new WebSocket(WEBSOCKET_URL);
+
+            socket.onopen = () => {
+                statusDiv.textContent = 'Connected. Start speaking!';
+                console.log('WebSocket connection opened.');
+
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then(stream => {
+                        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+
+                        mediaRecorder.addEventListener('dataavailable', event => {
+                            if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+                                socket.send(event.data);
+                            }
+                        });
+                        
+                        mediaRecorder.start(250);
+                    })
+                    .catch(err => {
+                        console.error("Error accessing microphone:", err);
+                        statusDiv.textContent = 'Could not access microphone.';
+                    });
+            };
+
+            socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'transcription') {
+                    data.segments.forEach(segment => {
+                        const segmentDiv = document.createElement('div');
+                        segmentDiv.className = 'segment';
+                        
+                        segment.words.forEach(word => {
+                            const wordSpan = document.createElement('span');
+                            wordSpan.className = 'word';
+                            wordSpan.textContent = word.word;
+                            wordSpan.title = `${word.start.toFixed(2)}s - ${word.end.toFixed(2)}s`;
+                            
+                            wordSpan.addEventListener('click', () => {
+                                // Remove active class from all words
+                                document.querySelectorAll('.word.active').forEach(w => w.classList.remove('active'));
+                                // Add active class to clicked word
+                                wordSpan.classList.add('active');
+                            });
+                            
+                            segmentDiv.appendChild(wordSpan);
+                        });
+                        
+                        transcriptDiv.appendChild(segmentDiv);
+                    });
+                } else if (data.type === 'error') {
+                    console.error("Server error:", data.error);
+                    statusDiv.textContent = 'An error occurred during transcription.';
+                }
+            };
+
+            socket.onclose = () => {
+                console.log('WebSocket connection closed.');
+                if(isRecording) {
+                    stopRecording();
+                }
+            };
+
+            socket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                statusDiv.textContent = 'An error occurred.';
+            };
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            button.textContent = 'Start Recording';
+            button.classList.remove('recording');
+            statusDiv.textContent = 'Click to start recording.';
+
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            }
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.close();
+            }
+        }
+    </script>
+</body>
+</html> 
