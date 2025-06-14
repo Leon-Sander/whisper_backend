@@ -120,5 +120,14 @@ async def get():
     with open("app/static/index.html") as f:
         return f.read()
 
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "model": MODEL_NAME,
+        "device": DEVICE,
+        "compute_type": COMPUTE_TYPE
+    }
+
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 
