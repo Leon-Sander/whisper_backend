@@ -29,7 +29,7 @@ MODEL_NAME = "distil-whisper/distil-large-v3.5-ct2"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 COMPUTE_TYPE = "float16"
 MODEL_PATH = os.getenv("WHISPER_MODEL_PATH", "./whisper_models")
-TRANSCRIPTION_ENDPOINT = os.getenv("TRANSCRIPTION_ENDPOINT", "http://localhost:8001/transcriptions")
+TRANSCRIPTION_ENDPOINT = os.getenv("TRANSCRIPTION_ENDPOINT", "http://localhost:8002/transcriptions")
 
 logger.info(f"Loading model '{MODEL_NAME}'...")
 model = WhisperModel(MODEL_NAME, device=DEVICE, compute_type=COMPUTE_TYPE, download_root=MODEL_PATH)
