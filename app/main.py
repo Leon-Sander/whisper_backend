@@ -1,79 +1,166 @@
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from faster_whisper import WhisperModel
 import asyncio
 import logging
 import torch
 import io
 import os
+import av
+import numpy as np
 
-logging.basicConfig(level=logging.INFO)
+# Use a more detailed logging format
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# --- Your Model Loading Logic (Unchanged and Respected) ---
+# --- Your Model Loading Logic ---
 MODEL_NAME = "distil-whisper/distil-large-v3.5-ct2"
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-COMPUTE_TYPE = "float16" if torch.cuda.is_available() else "int8"
+DEVICE = "cuda"
+COMPUTE_TYPE = "float16"
 MODEL_PATH = os.getenv("WHISPER_MODEL_PATH", "./whisper_models")
-logger.info(f"Loading model '{MODEL_NAME}' on {DEVICE}...")
+logger.info(f"Loading model '{MODEL_NAME}'...")
 model = WhisperModel(MODEL_NAME, device=DEVICE, compute_type=COMPUTE_TYPE, download_root=MODEL_PATH)
 logger.info("Model loaded successfully.")
+
+
+class StatefulDecoder:
+    """Manages the decoding state for a single WebSocket audio stream."""
+    def __init__(self):
+        self.codec_context = None
+        self.resampler = None
+        self.pcm_buffer = bytearray()
+
+    def _initialize_decoder(self, first_chunk: bytes):
+        """Initializes the decoder using the header from the first chunk."""
+        try:
+            with av.open(io.BytesIO(first_chunk)) as container:
+                stream = container.streams.audio[0]
+                
+                #_ NEW LOGGING: Print header/codec info
+                logger.info("---- Initializing Decoder from First Chunk ----")
+                logger.info(f"Codec: {stream.codec_context.codec.name}")
+                logger.info(f"Layout: {stream.codec_context.layout.name}")
+                logger.info(f"Sample Rate: {stream.codec_context.sample_rate}")
+                logger.info("-------------------------------------------------")
+
+                self.codec_context = stream.codec_context
+                self.resampler = av.AudioResampler(
+                    format='s16', layout='mono', rate=16000
+                )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to initialize decoder from first chunk: {e}")
+            return False
+
+    def decode_chunk(self, chunk: bytes) -> np.ndarray | None:
+        """Decodes a subsequent chunk of the stream."""
+        if not self.codec_context:
+            return None
+        
+        try:
+            packets = self.codec_context.parse(chunk)
+            if not packets:
+                return None
+                
+            frames = []
+            for packet in packets:
+                decoded_frames = self.codec_context.decode(packet)
+                for frame in decoded_frames:
+                    resampled_frames = self.resampler.resample(frame)
+                    for resampled_frame in resampled_frames:
+                        frames.append(np.frombuffer(resampled_frame.planes[0], dtype=np.int16))
+            
+            if not frames:
+                return None
+            return np.concatenate(frames)
+        except Exception as e:
+            logger.error(f"Error decoding subsequent chunk: {e}")
+            return None
+
 
 @app.websocket("/listen")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     logger.info("WebSocket connection established.")
     
+    decoder = StatefulDecoder()
+    initialized = False
+    
+    MIN_PCM_BUFFER_SIZE = 16000 * 2 * 3 # Buffer ~3 seconds of raw PCM audio
+
     try:
         while True:
-            # 1. Receive a single, complete audio file from the client.
-            #    Thanks to the client-side change, this will be a ~3-second chunk.
-            audio_chunk = await websocket.receive_bytes()
-
-            try:
-                # 2. Transcribe this single chunk directly. No buffering needed.
-                segments, info = await asyncio.to_thread(
-                    model.transcribe,
-                    io.BytesIO(audio_chunk), # Pass the bytes directly
-                    beam_size=5,
-                    language="en",
-                    vad_filter=True,
-                    word_timestamps=True
-                )
-                
-                # 3. Process and send the results for this chunk.
-                results = []
-                for segment in segments:
-                    if segment.text.strip():
-                        segment_data = {
-                            "text": segment.text.strip(),
-                            "words": [
-                                {"word": word.word.strip(), "start": word.start, "end": word.end}
-                                for word in segment.words
-                            ]
-                        }
-                        results.append(segment_data)
-                
-                if results:
-                    logger.info(f"Successfully transcribed a {info.duration:.2f}s chunk.")
-                    await websocket.send_json({"type": "transcription", "segments": results})
+            chunk = await websocket.receive_bytes()
+            
+            if not initialized:
+                #_ NEW LOGGING: Announce first chunk
+                logger.info(f"Received first chunk ({len(chunk)} bytes) for initialization.")
+                if decoder._initialize_decoder(chunk):
+                    initialized = True
                 else:
-                    logger.info("Received a chunk with no speech detected.")
+                    await websocket.close(code=1003, reason="Invalid initial audio chunk")
+                    break
+                continue
 
-            except Exception as e:
-                logger.error(f"Transcription error on a chunk: {e}")
-                # Don't crash the connection, just log and continue.
-                await websocket.send_json({"type": "error", "message": str(e)})
+            #_ NEW LOGGING: Announce subsequent chunk
+            logger.info(f"Received subsequent chunk ({len(chunk)} bytes).")
+            pcm_chunk = decoder.decode_chunk(chunk)
+            
+            if pcm_chunk is not None:
+                decoder.pcm_buffer.extend(pcm_chunk.tobytes())
+                #_ NEW LOGGING: Show buffer growth
+                logger.info(f"PCM buffer size: {len(decoder.pcm_buffer)} / {MIN_PCM_BUFFER_SIZE}")
+
+            if len(decoder.pcm_buffer) >= MIN_PCM_BUFFER_SIZE:
+                #_ NEW LOGGING: Announce transcription trigger
+                logger.info("--- Buffer full. Triggering transcription. ---")
+                buffer_to_process = decoder.pcm_buffer
+                decoder.pcm_buffer = bytearray()
+                
+                try:
+                    # Convert raw PCM to a WAV file in memory
+                    wav_data = np.frombuffer(buffer_to_process, dtype=np.int16)
+                    wav_file = io.BytesIO()
+                    channels=1; sample_rate=16000; sampwidth=2
+                    wav_header = b'RIFF' + (36 + wav_data.nbytes).to_bytes(4, 'little') + b'WAVEfmt ' + \
+                                (16).to_bytes(4, 'little') + (1).to_bytes(2, 'little') + \
+                                (channels).to_bytes(2, 'little') + (sample_rate).to_bytes(4, 'little') + \
+                                (sample_rate * channels * sampwidth).to_bytes(4, 'little') + \
+                                (channels * sampwidth).to_bytes(2, 'little') + \
+                                (sampwidth * 8).to_bytes(2, 'little') + b'data' + \
+                                wav_data.nbytes.to_bytes(4, 'little')
+                    wav_file.write(wav_header + wav_data.tobytes())
+                    wav_file.seek(0)
+                    
+                    #_ NEW LOGGING: Announce what's being sent to Whisper
+                    logger.info(f"Transcribing {len(buffer_to_process)} bytes of PCM data (as WAV).")
+                    
+                    segments, info = await asyncio.to_thread(
+                        model.transcribe,
+                        wav_file, beam_size=5, language="en", vad_filter=True, word_timestamps=True
+                    )
+                    
+                    results = [seg.text.strip() for seg in segments if seg.text.strip()]
+                    if results:
+                        await websocket.send_json({"type": "transcription", "segments": results})
+
+                except Exception as e:
+                    logger.error(f"Transcription failed: {e}")
 
     except WebSocketDisconnect:
         logger.info("Client disconnected.")
     except Exception as e:
-        logger.error(f"An unexpected websocket error occurred: {e}")
-
+        logger.error(f"An unexpected error occurred: {e}")
 # Serve static files
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
