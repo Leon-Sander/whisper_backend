@@ -1,8 +1,7 @@
 #!/bin/bash
 
-# Create application directory
-mkdir -p /workspace/speech-to-text
-cd /workspace/speech-to-text
+# We're already in /workspace/whisper_backend
+cd /workspace/whisper_backend
 
 # Create virtual environment
 python -m venv venv
@@ -17,17 +16,12 @@ pip install datasets[audio]
 pip install python-multipart==0.0.6
 pip install websockets==12.0
 
-# Create application structure
-mkdir -p app/static
+# Create directory for Whisper models if it doesn't exist
 mkdir -p whisper_models
-
-# Copy application files
-# Note: You'll need to upload these files to the RunPod instance
-# or clone them from your repository
 
 # Set up the application to run on startup
 echo '#!/bin/bash
-cd /workspace/speech-to-text
+cd /workspace/whisper_backend
 source venv/bin/activate
 uvicorn app.main:app --host 0.0.0.0 --port 8000' > /workspace/start.sh
 
