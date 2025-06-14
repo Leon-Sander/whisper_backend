@@ -36,12 +36,12 @@ pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https
 
 1. Build the Docker image:
 ```bash
-docker build -t speech-to-text-api .
+docker build -t whisper_backend .
 ```
 
 2. Run the container:
 ```bash
-docker run -p 8000:8000 --gpus all speech-to-text-api
+docker run --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -p 8000:8000 whisper_backend
 ```
 
 ## Configuration
