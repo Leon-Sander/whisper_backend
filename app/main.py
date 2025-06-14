@@ -23,8 +23,8 @@ app = FastAPI(title="Live Speech-to-Text API")
 MODEL_NAME = "distil-whisper/distil-large-v3.5-ct2"
 
 # Force CPU mode for now
-DEVICE = "cpu"
-COMPUTE_TYPE = "float32"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+COMPUTE_TYPE = "float16" if torch.cuda.is_available() else "float32"
 
 MODEL_PATH = os.getenv("WHISPER_MODEL_PATH", "./whisper_models")
 
