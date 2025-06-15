@@ -4,6 +4,7 @@ import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from faster_whisper import WhisperModel
 import asyncio
 import logging
@@ -14,7 +15,6 @@ from dotenv import load_dotenv
 import aiohttp
 from datetime import datetime, timedelta
 from typing import List, Dict
-import json
 
 # Load environment variables
 load_dotenv()
@@ -23,7 +23,13 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allows all headers
+)
 # --- Your Model Loading Logic ---
 MODEL_NAME = "distil-whisper/distil-large-v3.5-ct2"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
