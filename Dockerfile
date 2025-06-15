@@ -1,13 +1,23 @@
-FROM nvcr.io/nvidia/pytorch:24.01-py3
+FROM nvidia/cuda:12.3.2-cudnn9-devel-ubuntu22.04
 
 WORKDIR /app
+
+# Install pip and git
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-pip \
+    git \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install setuptools first
 RUN pip3 install --no-cache-dir setuptools
 
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Install PyTorch and other requirements in a single layer
+RUN pip3 install --no-cache-dir \
+    torch==2.2.0 torchvision==0.17.0 torchaudio==2.2.0 --index-url https://download.pytorch.org/whl/cu121 \
+    -r requirements.txt
 
 # Copy application code
 COPY . .

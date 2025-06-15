@@ -37,11 +37,22 @@ pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https
 1. Build the Docker image:
 ```bash
 docker build -t whisper_backend .
+#DOCKER_BUILDKIT=1 docker build -t whisper-backend .
+```
+
+```bash
 ```
 
 2. Run the container:
+
+For Windows (PowerShell):
 ```bash
-docker run --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -p 8000:8000 whisper_backend
+docker run --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -p 8000:8000 -v ${PWD}/whisper_models:/app/whisper_models whisper_backend
+```
+
+For Linux:
+```bash
+docker run --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -p 8000:8000 -v $(pwd)/whisper_models:/app/whisper_models whisper_backend
 ```
 
 ## Configuration
